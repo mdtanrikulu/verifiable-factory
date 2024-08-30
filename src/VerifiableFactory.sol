@@ -14,15 +14,8 @@ contract VerifiableFactory {
         address newContract;
 
         assembly {
-            newContract := create2(
-                0,
-                add(bytecode, 0x20),
-                mload(bytecode),
-                salt
-            )
-            if iszero(extcodesize(newContract)) {
-                revert(0, 0)
-            }
+            newContract := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
+            if iszero(extcodesize(newContract)) { revert(0, 0) }
         }
 
         emit ContractCreated(newContract);
@@ -35,11 +28,7 @@ contract VerifiableFactory {
     }
 
     // verifies if a given address was created by this factory using CREATE2 and if the bytecode matches
-    function verifyContract(
-        address createdContractAddress,
-        uint256 _value,
-        address user
-    ) public view returns (bool) {
+    function verifyContract(address createdContractAddress, uint256 _value, address user) public view returns (bool) {
         // first check if the factory address stored in the contract matches
         ChildContract child = ChildContract(createdContractAddress);
         if (child.factory() != address(this)) {
@@ -50,14 +39,7 @@ contract VerifiableFactory {
         bytes32 salt = generateSalt(user);
         bytes memory bytecode = getContractBytecode(_value);
 
-        bytes32 childHash = keccak256(
-            abi.encodePacked(
-                bytes1(0xff),
-                address(this),
-                salt,
-                keccak256(bytecode)
-            )
-        );
+        bytes32 childHash = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(bytecode)));
         address expectedAddress = address(uint160(uint256(childHash)));
 
         // ensure that the expected address matches with created contract address
@@ -72,17 +54,13 @@ contract VerifiableFactory {
         }
 
         // retrieve the expected runtime bytecode
-        bytes32 expectedBytecodeHash = keccak256(
-            type(ChildContract).runtimeCode
-        );
+        bytes32 expectedBytecodeHash = keccak256(type(ChildContract).runtimeCode);
 
         return expectedBytecodeHash == deployedBytecodeHash;
     }
 
     // helper function to get the creation bytecode of the ChildContract
-    function getContractBytecode(
-        uint256 _value
-    ) public view returns (bytes memory) {
+    function getContractBytecode(uint256 _value) public view returns (bytes memory) {
         bytes memory bytecode = type(ChildContract).creationCode;
         return abi.encodePacked(bytecode, abi.encode(_value, address(this)));
     }
