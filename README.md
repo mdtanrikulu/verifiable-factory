@@ -1,66 +1,55 @@
-## Foundry
+## Verifiable Factory Contract
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+### Components
 
-Foundry consists of:
+#### 1. Verifiable Factory Contract
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- The VerifiableFactory contract is responsible for deploying ChildContract instances using CREATE2
+- It also handles the verification of deployed contracts:
+    - On-chain: Verifies the contract's address and bytecode using CREATE2 and extcodehash.
+    - Off-chain: Triggers a CCIP-Read flow when further verification (like storage layout consistency) is required.
 
-## Documentation
+#### 2. Child Contract
 
-https://book.getfoundry.sh/
+- The ChildContract is a simple contract deployed by the factory. It stores two key values for MVP purposes:
+    - value: A uint256 value passed during deployment.
+    - factory: The address of the factory contract that deployed it.
+- These storage slots are verified during the off-chain proof process.
 
-## Usage
+#### 3. CCIP Gateway
 
-### Build
+- This is the off-chain service responsible for providing Merkle proofs of the contract's storage layout. 
 
-```shell
-$ forge build
-```
+### Architecture
 
-### Test
+```mermaid
+sequenceDiagram
+    participant User
+    participant VerifiableFactory
+    participant ChildContract
+    participant CCIPGateway
 
-```shell
-$ forge test
-```
+    %% Contract Creation Flow
+    User->>VerifiableFactory: Call createContract(_value)
+    VerifiableFactory->>VerifiableFactory: generateSalt(address(factory) + msg.sender)
+    VerifiableFactory->>VerifiableFactory: getContractBytecode(_value)
+    VerifiableFactory->>VerifiableFactory: Use CREATE2 to deploy ChildContract
+    VerifiableFactory->>User: Return newContract address
+    VerifiableFactory->>ChildContract: Emit ContractCreated(newContract)
 
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+    %% Contract Verification Flow
+    User->>VerifiableFactory: Call verifyContract(createdContractAddress, _value, user)
+    VerifiableFactory->>VerifiableFactory: Check CREATE2 Address
+    VerifiableFactory->>ChildContract: Use extcodehash to check runtime bytecode
+    alt Bytecode Valid but Storage Verification Needed
+        VerifiableFactory->>User: Return OffchainLookup for CCIP-Read
+        User->>CCIPGateway: Off-chain request for storage proof
+        CCIPGateway->>ChildContract: Query ChildContract storage layout (off-chain)
+        CCIPGateway->>User: Return Merkle proof
+        User->>VerifiableFactory: Call verifyCallback with proof
+        VerifiableFactory->>VerifiableFactory: Verify Merkle proof of storage layout
+        VerifiableFactory->>User: Return true/false after proof verification
+    else Bytecode or Address Invalid
+        VerifiableFactory->>User: Return VerificationFailed
+    end
 ```
