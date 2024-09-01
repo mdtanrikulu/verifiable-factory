@@ -12,7 +12,12 @@ contract CounterScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        factory = new VerifiableFactory();
+        string[] memory urls;
+        // initialize the ccip-read urls
+        urls = new string[](1);
+        urls[0] = "";
+
+        factory = new VerifiableFactory(urls, bytes32(0));
 
         vm.stopBroadcast();
     }
