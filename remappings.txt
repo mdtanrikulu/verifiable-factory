@@ -1,1 +1,2 @@
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+clones-with-immutable-args/=lib/clones-with-immutable-args/src/
