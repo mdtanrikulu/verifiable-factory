@@ -9,11 +9,9 @@ import "@openzeppelin/contracts/utils/Address.sol";
 // import {ClonesWithImmutableArgs} from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
 
 interface IVerifiableContract {
-    function verifyStorageLayout(
-        address contractAddress,
-        bytes32 slot,
-        uint256 value
-    ) external returns (bytes memory);
+    function verifyStorageLayout(address contractAddress, bytes32 slot, uint256 value)
+        external
+        returns (bytes memory);
 }
 
 contract VerifiableFactory {
@@ -22,13 +20,7 @@ contract VerifiableFactory {
     event ContractCreated(address newContract);
 
     error VerificationFailed();
-    error OffchainLookup(
-        address sender,
-        string[] urls,
-        bytes callData,
-        bytes4 callbackFunction,
-        bytes extraData
-    );
+    error OffchainLookup(address sender, string[] urls, bytes callData, bytes4 callbackFunction, bytes extraData);
 
     string[] public urls;
     bytes32 public rootHash;
@@ -45,15 +37,8 @@ contract VerifiableFactory {
         address newContract;
 
         assembly {
-            newContract := create2(
-                0,
-                add(bytecode, 0x20),
-                mload(bytecode),
-                salt
-            )
-            if iszero(extcodesize(newContract)) {
-                revert(0, 0)
-            }
+            newContract := create2(0, add(bytecode, 0x20), mload(bytecode), salt)
+            if iszero(extcodesize(newContract)) { revert(0, 0) }
         }
 
         emit ContractCreated(newContract);
@@ -61,11 +46,11 @@ contract VerifiableFactory {
     }
 
     // verification function that includes both bytecode and storage verification
-    function verifyContract(
-        address createdContractAddress,
-        uint256 _value,
-        address user
-    ) public view returns (bytes memory) {
+    function verifyContract(address createdContractAddress, uint256 _value, address user)
+        public
+        view
+        returns (bytes memory)
+    {
         // verify using CREATE2 and bytecode
         if (!verifyCreate2(createdContractAddress, _value, user)) {
             revert VerificationFailed();
@@ -75,8 +60,7 @@ contract VerifiableFactory {
             address(this),
             urls,
             abi.encodeCall(
-                IVerifiableContract.verifyStorageLayout,
-                (createdContractAddress, bytes32(uint256(0)), _value)
+                IVerifiableContract.verifyStorageLayout, (createdContractAddress, bytes32(uint256(0)), _value)
             ),
             this.verifyCallback.selector,
             abi.encode(createdContractAddress, bytes32(uint256(0)), _value)
@@ -84,10 +68,7 @@ contract VerifiableFactory {
     }
 
     // callback to complete storage verification after off-chain proof (ccip-read)
-    function verifyCallback(
-        bytes32[] calldata merkleProof,
-        bytes32 leafHash
-    ) public view returns (bool) {
+    function verifyCallback(bytes32[] calldata merkleProof, bytes32 leafHash) public view returns (bool) {
         // Verify the Merkle proof using the stored rootHash
         bool isValid = MerkleProof.verify(merkleProof, rootHash, leafHash);
         require(isValid, "VerificationFailed");
@@ -95,22 +76,11 @@ contract VerifiableFactory {
     }
 
     // helper function to perform CREATE2 and extcodehash checks
-    function verifyCreate2(
-        address createdContractAddress,
-        uint256 _value,
-        address user
-    ) internal view returns (bool) {
+    function verifyCreate2(address createdContractAddress, uint256 _value, address user) internal view returns (bool) {
         // recalculate the address that should have been created
         bytes32 salt = generateSalt(user);
         bytes memory bytecode = getContractBytecode(_value);
-        bytes32 childHash = keccak256(
-            abi.encodePacked(
-                bytes1(0xff),
-                address(this),
-                salt,
-                keccak256(bytecode)
-            )
-        );
+        bytes32 childHash = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(bytecode)));
         address expectedAddress = address(uint160(uint256(childHash)));
 
         // ensure that the expected address matches with created contract address
@@ -125,17 +95,13 @@ contract VerifiableFactory {
         }
 
         // retrieve the expected runtime bytecode
-        bytes32 expectedBytecodeHash = keccak256(
-            type(ChildContract).runtimeCode
-        );
+        bytes32 expectedBytecodeHash = keccak256(type(ChildContract).runtimeCode);
 
         return expectedBytecodeHash == deployedBytecodeHash;
     }
 
     // helper function to get the creation bytecode of the ChildContract
-    function getContractBytecode(
-        uint256 _value
-    ) public view returns (bytes memory) {
+    function getContractBytecode(uint256 _value) public view returns (bytes memory) {
         bytes memory bytecode = type(ChildContract).creationCode;
         return abi.encodePacked(bytecode, abi.encode(_value, address(this)));
     }
