@@ -1,41 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/console.sol";
-import "./ChildContract.sol";
-import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-
 import {EVMFetcher} from "@ensdomains/evm-verifier/EVMFetcher.sol";
 import {EVMFetchTarget} from "@ensdomains/evm-verifier/EVMFetchTarget.sol";
 import {IEVMVerifier} from "@ensdomains/evm-verifier/IEVMVerifier.sol";
 
-// import {ClonesWithImmutableArgs} from "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-interface IVerifiableContract {
-    function verifyStorageLayout(
-        address contractAddress,
-        bytes32 slot,
-        uint256 value
-    ) external returns (bytes memory);
-}
-
-contract VerifiableFactory is EVMFetchTarget {
-    using Address for address;
+contract ProxyFactory is EVMFetchTarget {
     using EVMFetcher for EVMFetcher.EVMFetchRequest;
 
-    event ContractCreated(address newContract);
-    error VerificationFailed();
-    error OffchainLookup(
-        address sender,
-        string[] urls,
-        bytes callData,
-        bytes4 callbackFunction,
-        bytes extraData
-    );
-
     IEVMVerifier public immutable verifier;
-    uint256 constant CONTRACT_REGISTRY_SLOT = 0;
+    uint256 constant PROXY_NONCE_SLOT = 0;
+    uint256 constant PROXY_REGISTRY_SLOT = 1;
+
+    event ProxyDeployed(address indexed proxyAddress);
 
     constructor(IEVMVerifier _verifier) {
         require(
@@ -45,101 +24,125 @@ contract VerifiableFactory is EVMFetchTarget {
         verifier = _verifier;
     }
 
-    // function to deploy a ChildContract using CREATE2
-    function createContract(uint256 _value) public returns (address) {
-        bytes32 salt = generateSalt(msg.sender);
-        bytes memory bytecode = getContractBytecode(_value);
-        address newContract;
+    function deployProxy(
+        address implementation,
+        uint256 nonce
+    ) external returns (address) {
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, nonce));
+        bytes memory data = abi.encodeWithSignature(
+            "initialize(uint256)",
+            nonce
+        );
 
-        assembly {
-            newContract := create2(
-                0,
-                add(bytecode, 0x20),
-                mload(bytecode),
-                salt
+        address proxy = address(
+            new TransparentUpgradeableProxy{salt: salt}(
+                implementation,
+                address(this),
+                data
             )
-            if iszero(extcodesize(newContract)) {
-                revert(0, 0)
-            }
-        }
+        );
 
-        emit ContractCreated(newContract);
-        return newContract;
+        require(isContract(proxy), "Proxy deployment failed");
+
+        emit ProxyDeployed(proxy);
+        return proxy;
     }
 
-    // verification function that includes both bytecode and storage verification
-    function verifyContract(
-        address target,
-        uint256 _value,
-        address user
-    ) public view returns (bytes memory) {
-        // verify using CREATE2 and bytecode
-        if (!verifyCreate2(target, _value, user)) {
-            revert VerificationFailed();
-        }
+    function updateRegistry(address proxy, address newRegistry) external {
+        (bool success, bytes memory result) = proxy.staticcall(
+            abi.encodeWithSignature("nonce()")
+        );
+        require(success, "Failed to retrieve nonce from proxy");
+        uint256 proxyNonce = abi.decode(result, (uint256));
 
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, proxyNonce));
+        address expectedProxyAddress = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            address(this),
+                            salt,
+                            keccak256(
+                                type(TransparentUpgradeableProxy).creationCode
+                            )
+                        )
+                    )
+                )
+            )
+        );
+        require(
+            expectedProxyAddress == proxy,
+            "Only the creator can update the registry"
+        );
+
+        (success, ) = proxy.call(
+            abi.encodeWithSignature("updateRegistry(address)", newRegistry)
+        );
+        require(success, "Registry update failed");
+    }
+
+    function verifyContract(address proxy) public view {
         EVMFetcher
-            .newFetchRequest(verifier, target)
-            .getStatic(CONTRACT_REGISTRY_SLOT)
-            .fetch(this.verifyCallback.selector, "");
+            .newFetchRequest(verifier, proxy)
+            .getStatic(PROXY_NONCE_SLOT)
+            .getStatic(PROXY_REGISTRY_SLOT)
+            .fetch(this.verifyCallback.selector, abi.encode(proxy));
     }
 
-    // callback to complete storage verification after off-chain proof (ccip-read)
     function verifyCallback(
         bytes calldata response
-    ) public pure returns (bool) {
-        address registry = abi.decode(response, (address));
+    ) public view returns (bool) {
+        (uint256 nonce, /*address registryAddress*/, bytes memory extraData) = abi
+            .decode(response, (uint256, address, bytes));
+        address proxy = abi.decode(extraData, (address));
+
+        bytes32 salt = keccak256(abi.encodePacked(msg.sender, nonce));
+        address expectedProxyAddress = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            bytes1(0xff),
+                            address(this),
+                            salt,
+                            keccak256(
+                                type(TransparentUpgradeableProxy).creationCode
+                            )
+                        )
+                    )
+                )
+            )
+        );
+        require(expectedProxyAddress == proxy, "Proxy address mismatch");
+
+        // require(registryAddress == REGISTRY_ADDRESS, "Invalid registry address");
+
         return true;
     }
 
-    // helper function to perform CREATE2 and extcodehash checks
-    function verifyCreate2(
-        address createdContractAddress,
-        uint256 _value,
-        address user
-    ) internal view returns (bool) {
-        // recalculate the address that should have been created
-        bytes32 salt = generateSalt(user);
-        bytes memory bytecode = getContractBytecode(_value);
-        bytes32 childHash = keccak256(
-            abi.encodePacked(
-                bytes1(0xff),
-                address(this),
-                salt,
-                keccak256(bytecode)
-            )
-        );
-        address expectedAddress = address(uint160(uint256(childHash)));
-
-        // ensure that the expected address matches with created contract address
-        if (expectedAddress != createdContractAddress) {
-            return false;
-        }
-
-        // retrieve the deployed contract's runtime bytecode hash using extcodehash
-        bytes32 deployedBytecodeHash;
+    function isContract(address account) internal view returns (bool) {
+        uint256 size;
         assembly {
-            deployedBytecodeHash := extcodehash(createdContractAddress)
+            size := extcodesize(account)
         }
+        return size > 0;
+    }
+}
 
-        // retrieve the expected runtime bytecode
-        bytes32 expectedBytecodeHash = keccak256(
-            type(ChildContract).runtimeCode
-        );
+// RegistryProxy Contract
+contract RegistryProxy {
+    uint256 public nonce;
+    address public registry;
 
-        return expectedBytecodeHash == deployedBytecodeHash;
+    function updateRegistry(address newRegistry) external {
+        require(msg.sender == registry, "Only owner can update");
+        registry = newRegistry;
     }
 
-    // helper function to get the creation bytecode of the ChildContract
-    function getContractBytecode(
-        uint256 _value
-    ) public view returns (bytes memory) {
-        bytes memory bytecode = type(ChildContract).creationCode;
-        return abi.encodePacked(bytecode, abi.encode(_value, address(this)));
-    }
-
-    // generates a unique salt based on the sender and the factory's address
-    function generateSalt(address user) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(address(this), user));
+    function initialize(uint256 _nonce) external {
+        require(nonce == 0, "Already initialized");
+        nonce = _nonce;
     }
 }
