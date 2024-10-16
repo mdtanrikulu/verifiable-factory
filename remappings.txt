@@ -1,3 +1,2 @@
 @openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
 @ensdomains/evm-verifier/=lib/evmgateway/evm-verifier/contracts/
-clones-with-immutable-args/=lib/clones-with-immutable-args/src/

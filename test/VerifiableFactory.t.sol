@@ -1,76 +1,78 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
-import "../src/VerifiableFactory.sol";
-import "../src/ChildContract.sol";
+import {Test} from "forge-std/Test.sol";
+import {VerifiableFactory} from "../src/VerifiableFactory.sol";
+import {IEVMVerifier} from "@ensdomains/evm-verifier/IEVMVerifier.sol";
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {ProxyAdmin} from "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 
-// import "../src/mock/VerifyCreate2Harness.sol";
-
-contract FactoryTest is Test {
-    VerifiableFactory factory;
-    bytes32 merkleRoot;
-    string[] urls;
+contract VerifiableFactoryTest is Test {
+    VerifiableFactory public factory;
+    address public deployer;
+    IEVMVerifier verifier1;
+    IEVMVerifier verifier2;
+    IEVMVerifier verifier3;
 
     function setUp() public {
-        // static merkle root
-        merkleRoot = 0x38fd43fd2274f45a44e9dcb8da9065881f7416a5ba85a5684eee8e2db0e0a1f3;
+        deployer = address(this);
+        verifier1 = IEVMVerifier(address(0));
+        verifier2 = IEVMVerifier(address(0));
+        verifier3 = IEVMVerifier(address(0));
 
-        // mocking ccip-read urls
-        urls = new string[](1);
-        urls[0] = "";
+        VerifiableFactory.Verifiers[] memory verifiers = new VerifiableFactory.Verifiers[](3);
+        verifiers[0] = VerifiableFactory.Verifiers({networkId: 1, verifier: address(verifier1)});
+        verifiers[1] = VerifiableFactory.Verifiers({networkId: 42, verifier: address(verifier2)});
+        verifiers[2] = VerifiableFactory.Verifiers({networkId: 137, verifier: address(verifier3)});
 
-        factory = new VerifiableFactory(urls, merkleRoot);
+        factory = new VerifiableFactory(verifiers);
     }
 
-    function testCreateContract() public {
-        uint256 value = 42;
-
-        address childContractAddress = factory.createContract(value);
-
-        ChildContract child = ChildContract(childContractAddress);
-        assertEq(child.value(), value, "Child contract's value should be correct");
-        assertEq(child.factory(), address(factory), "Child contract's factory should be correct");
+    function testFactoryDeployment() public view {
+        assert(address(factory) != address(0));
     }
 
-    // function testVerifyContract() public {
-    //     uint256 value = 42;
-    //     address user = address(this);
-
-    //     address childContractAddress = factory.createContract(value);
-
-    //     // mock a successful off-chain storage layout verification (skip OffchainLookup for simplicity)
-    //     // in a full test, simulate the off-chain verification and invoke verifyCallback manually
-    //     // this test only for verifying that the contract was created by the factory
-
-    //     // verify the contract using factory's verifyContract function
-    //     // normally this would trigger OffchainLookup; here we're simplifying by calling internal function directly
-    //     VerifyCreate2Harness harness = new VerifyCreate2Harness(urls, merkleRoot);
-    //     bool result = harness.verifyCreate2Harness(childContractAddress, value, user);
-    //     assertTrue(result, "Verification should succeed for valid contract");
-    // }
-
-    function testVerifyInvalidContract() public {
-        // deploy a ChildContract without the factory
-        ChildContract rogueContract = new ChildContract(42, address(factory));
-
-        // verify if it using the factory (this should fail)
-        vm.expectRevert(VerifiableFactory.VerificationFailed.selector);
-        factory.verifyContract(address(rogueContract), 42, address(this));
+    function testVerifierMapping() public view {
+        // Check if verifier addresses are correctly set
+        assertEq(address(factory.verifiers(1)), address(verifier1));
+        assertEq(address(factory.verifiers(42)), address(verifier2));
+        assertEq(address(factory.verifiers(137)), address(verifier3));
     }
 
-    function testVerifyCallback() public view {
-        bytes32 layout = bytes32(uint256(0));
-        uint256 value = 42;
+    function testDeployProxy() public {
+        uint256 nonce = 1;
+        address proxyAddress = factory.deployProxy(nonce);
 
-        // mock merkle proof and leaf for off-chain verification
-        bytes32[] memory merkleProof = new bytes32[](1);
-        merkleProof[0] = 0xcf5d987e8c58e4cfb73aa2884be6034c1cb96def6945e12657d99532fe2c81b6;
+        // Check if proxy was deployed
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(proxyAddress)
+        }
+        assert(codeSize > 0);
+        emit log_named_address("Deployed Proxy Address", proxyAddress);
+    }
 
-        bytes32 leafHash = keccak256(bytes.concat(keccak256(abi.encode(layout, value))));
-        console.logBytes32(leafHash);
+    function testUpdateRegistry() public {
+        uint256 nonce = 1;
+        address proxyAddress = factory.deployProxy(nonce);
+        address newRegistryAddress = address(0);
 
-        bool result = factory.verifyCallback(merkleProof, leafHash);
-        assertTrue(result, "VerificationCallback should succeed with valid Merkle proof");
+        // Update the registry of the deployed proxy
+        factory.updateRegistry(proxyAddress, newRegistryAddress);
+
+        // Retrieve the registry from the proxy to confirm the update
+        (bool success, bytes memory result) = proxyAddress.call(abi.encodeWithSignature("registry()"));
+        assert(success);
+        address updatedRegistryAddress = abi.decode(result, (address));
+        assertEq(updatedRegistryAddress, newRegistryAddress);
+    }
+
+    function testVerifyContract() public {
+        uint256 nonce = 1;
+        address proxyAddress = factory.deployProxy(nonce);
+        factory.verifyContract(proxyAddress, 1);
+
+        // If no revert, verification passed
+        assertTrue(true);
     }
 }
