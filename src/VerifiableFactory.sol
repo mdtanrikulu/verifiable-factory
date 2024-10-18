@@ -11,8 +11,6 @@ interface IProxy {
 }
 
 contract VerifiableFactory {
-    uint256 constant PROXY_NONCE_SLOT = 0;
-    uint256 constant PROXY_REGISTRY_SLOT = 1;
 
     event ProxyDeployed(
         address indexed sender,
@@ -24,23 +22,21 @@ contract VerifiableFactory {
     constructor() {}
 
     /**
-     * @dev deploys a new `TransparentVerifiableProxy` contract using a deterministic address derived from
-     *      the sender's address and a salt.
+     * @dev Deploys a new `TransparentVerifiableProxy` contract at a deterministic address.
      *
-     * The function creates a new proxy contract that is controlled by the factory's `ProxyAdmin`.
-     * When the proxy is deployed, it starts by using the `RegistryProxy` contract as its main implementation.
-     * During the deployment, the initialize function is called to set up the proxy.
-     * The salt ensures that each user gets a unique proxy, even if the same user deploys multiple proxies.
+     * This function deploys a proxy contract using the CREATE2 opcode, ensuring a predictable 
+     * address based on the sender's address and a provided salt. The deployed proxy is 
+     * controlled by the factory and is initialized to use a specific implementation.
      *
-     * - The function uses a `salt` to create a deterministic address based on `msg.sender` and a provided salt.
-     * - The `initialize` function of the `RegistryProxy` contract is called immediately after deployment to set up
-     *   the proxy with the salt and `ProxyAdmin`.
-     * - The proxy is managed by a `ProxyAdmin` contract, ensuring that upgrades and critical functions are restricted to the admin.
-     * - A custom event `ProxyDeployed` is emitted to track the deployment of the new proxy.
+     * - A unique address for the proxy is generated using the caller's address and the salt.
+     * - After deployment, the proxy's `initialize` function is called to configure it with the given salt, 
+     *   the factory address, and the provided implementation address.
+     * - The proxy is fully managed by the factory, which controls upgrades and other administrative methods.
+     * - The event `ProxyDeployed` is emitted, logging details of the deployment including the sender, proxy address, salt, and implementation.
      *
-     * @param implementation Registry implementation address
-     * @param salt A unique number provided by the caller to create a unique proxy address.
-     * @return proxy The address of the deployed `TransparentVerifiableProxy` contract.
+     * @param implementation The address of the contract implementation the proxy will delegate calls to.
+     * @param salt A value provided by the caller to ensure uniqueness of the proxy address.
+     * @return proxy The address of the deployed `TransparentVerifiableProxy`.
      */
     function deployProxy(
         address implementation,
@@ -76,14 +72,14 @@ contract VerifiableFactory {
     }
 
     /**
-     * @dev VerifyContract method for both same-chain verification
+     * @dev Initiates verification of a proxy contract.
      *
-     * The function starts the process of verifying a specific proxy contract by sending a request
+     * This function attempts to validate a proxy contract by retrieving its salt 
+     * and reconstructing the address to ensure it was correctly deployed by the 
+     * current factory.
      *
-     *
-     * - It retrieves static values from storage slots (`PROXY_NONCE_SLOT` and `PROXY_REGISTRY_SLOT`) to assist in the verification process.
-     *
-     * @param proxy The address of the proxy contract to be verified.
+     * @param proxy The address of the proxy contract being verified.
+     * @return A boolean indicating whether the verification succeeded.
      */
     function verifyContract(address proxy) public view returns (bool) {
         // directly fetch storage
