@@ -18,7 +18,7 @@ interface ITransparentVerifiableProxy {
 }
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
-    uint256 public nonce; // Nonce, being used creating the proxy
+    uint256 public salt; // Salt, being used creating the proxy
     address public owner; // The owner of the proxy contract
 
     // ### EVENTS
@@ -41,7 +41,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * - If `data` is empty, `msg.value` must be zero.
      */
     function initialize(
-        uint256 _nonce,
+        uint256 _salt,
         address _owner,
         address implementation,
         bytes memory data
@@ -51,7 +51,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
             "New implementation cannot be the zero address"
         );
 
-        nonce = _nonce;
+        salt = _salt;
         owner = _owner;
 
         ERC1967Utils.upgradeToAndCall(implementation, data);

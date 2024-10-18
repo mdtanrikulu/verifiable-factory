@@ -5,7 +5,7 @@ import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {ITransparentVerifiableProxy, TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
 
 interface IProxy {
-    function nonce() external view returns (uint256);
+    function salt() external view returns (uint256);
 
     function owner() external view returns (address);
 }
@@ -17,7 +17,7 @@ contract VerifiableFactory {
     event ProxyDeployed(
         address indexed sender,
         address indexed proxyAddress,
-        bytes32 salt,
+        uint256 salt,
         address implementation
     );
 
@@ -25,35 +25,36 @@ contract VerifiableFactory {
 
     /**
      * @dev deploys a new `TransparentVerifiableProxy` contract using a deterministic address derived from
-     *      the sender's address and a nonce.
+     *      the sender's address and a salt.
      *
      * The function creates a new proxy contract that is controlled by the factory's `ProxyAdmin`.
      * When the proxy is deployed, it starts by using the `RegistryProxy` contract as its main implementation.
      * During the deployment, the initialize function is called to set up the proxy.
-     * The nonce ensures that each user gets a unique proxy, even if the same user deploys multiple proxies.
+     * The salt ensures that each user gets a unique proxy, even if the same user deploys multiple proxies.
      *
-     * - The function uses a `salt` to create a deterministic address based on `msg.sender` and a provided nonce.
+     * - The function uses a `salt` to create a deterministic address based on `msg.sender` and a provided salt.
      * - The `initialize` function of the `RegistryProxy` contract is called immediately after deployment to set up
-     *   the proxy with the nonce and `ProxyAdmin`.
+     *   the proxy with the salt and `ProxyAdmin`.
      * - The proxy is managed by a `ProxyAdmin` contract, ensuring that upgrades and critical functions are restricted to the admin.
      * - A custom event `ProxyDeployed` is emitted to track the deployment of the new proxy.
      *
-     * @param nonce A unique number provided by the caller to create a unique proxy address.
+     * @param implementation Registry implementation address
+     * @param salt A unique number provided by the caller to create a unique proxy address.
      * @return proxy The address of the deployed `TransparentVerifiableProxy` contract.
      */
     function deployProxy(
         address implementation,
-        uint256 nonce
+        uint256 salt
     ) external returns (address) {
-        bytes32 salt = keccak256(abi.encode(msg.sender, nonce));
+        bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
         TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{
-            salt: salt
+            salt: outerSalt
         }();
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
-        proxy.initialize(nonce, address(this), implementation, "");
+        proxy.initialize(salt, address(this), implementation, "");
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
         return address(proxy);
@@ -86,7 +87,7 @@ contract VerifiableFactory {
      */
     function verifyContract(address proxy) public view returns (bool) {
         // directly fetch storage
-        try IProxy(proxy).nonce() returns (uint256 nonce) {
+        try IProxy(proxy).salt() returns (uint256 salt) {
             address owner = IProxy(proxy).owner();
 
             require(
@@ -95,16 +96,16 @@ contract VerifiableFactory {
             );
 
             // reconstruct the address using CREATE2 and the original salt
-            bytes32 salt = keccak256(abi.encode(msg.sender, nonce));
+            bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
             // bytes memory bytecode = abi.encodePacked(
             //     type(TransparentVerifiableProxy).creationCode,
             //     abi.encode(salt, address(this))
             // );
 
-            // Compute the expected proxy address using the salt
+            // Compute the expected proxy address using the outerSalt
             address expectedProxyAddress = Create2.computeAddress(
-                salt,
+                outerSalt,
                 keccak256(type(TransparentVerifiableProxy).creationCode)
             );
 

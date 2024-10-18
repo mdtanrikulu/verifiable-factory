@@ -21,8 +21,8 @@ contract VerifiableFactoryTest is Test {
     }
 
     function testDeployProxy() public {
-        uint256 nonce = 1;
-        address proxyAddress = factory.deployProxy(address(0), nonce);
+        uint256 salt = 1;
+        address proxyAddress = factory.deployProxy(address(0), salt);
 
         // Check if proxy was deployed
         uint256 codeSize;
@@ -32,18 +32,18 @@ contract VerifiableFactoryTest is Test {
         assert(codeSize > 0);
         emit log_named_address("Deployed Proxy Address", proxyAddress);
 
-        // Check if proxy was initialized properly with nonce and proxyAdmin
+        // Check if proxy was initialized properly with salt and proxyAdmin
         (bool success, bytes memory result) = proxyAddress.call(
-            abi.encodeWithSignature("nonce()")
+            abi.encodeWithSignature("salt()")
         );
         assert(success);
         uint256 deployedNonce = abi.decode(result, (uint256));
-        assertEq(deployedNonce, nonce);
+        assertEq(deployedNonce, salt);
     }
 
     function testUpdateRegistry() public {
-        uint256 nonce = 1;
-        address proxyAddress = factory.deployProxy(address(0), nonce);
+        uint256 salt = 1;
+        address proxyAddress = factory.deployProxy(address(0), salt);
         address newRegistryAddress = address(0xBEEF);
 
         // Update the registry of the deployed proxy
@@ -65,8 +65,8 @@ contract VerifiableFactoryTest is Test {
     }
 
     function testVerifyContract() public {
-        uint256 nonce = 1;
-        address proxyAddress = factory.deployProxy(address(0), nonce); // tbd
+        uint256 salt = 1;
+        address proxyAddress = factory.deployProxy(address(0), salt); // tbd
         factory.verifyContract(proxyAddress);
 
         // If no revert, verification passed
@@ -74,8 +74,8 @@ contract VerifiableFactoryTest is Test {
     }
 
     function testUpgradeImplementation() public {
-        uint256 nonce = 1;
-        address proxyAddress = factory.deployProxy(address(0), nonce); // tbd
+        uint256 salt = 1;
+        address proxyAddress = factory.deployProxy(address(0), salt); // tbd
 
         // Upgrade the proxy to point to the new implementation
         factory.upgradeImplementation(proxyAddress, address(0), ""); //tbd
@@ -90,10 +90,10 @@ contract VerifiableFactoryTest is Test {
     }
 
     function testUpgradeAndCall() public {
-        uint256 nonce = 1;
-        address proxyAddress = factory.deployProxy(address(0), nonce);
+        uint256 salt = 1;
+        address proxyAddress = factory.deployProxy(address(0), salt);
 
-        // ABI encode data for initializing the new implementation with a specific nonce and registry
+        // ABI encode data for initializing the new implementation with a specific salt and registry
         bytes memory data = abi.encodeWithSignature(
             "initialize(uint256,address)",
             2,
@@ -105,7 +105,7 @@ contract VerifiableFactoryTest is Test {
 
         // Check if the new implementation was initialized correctly
         (bool success, bytes memory result) = proxyAddress.call(
-            abi.encodeWithSignature("nonce()")
+            abi.encodeWithSignature("salt()")
         );
         assert(success);
         uint256 newNonce = abi.decode(result, (uint256));
