@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {console} from "forge-std/console.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {ITransparentVerifiableProxy, TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
 
@@ -8,10 +9,11 @@ interface IProxy {
     function salt() external view returns (uint256);
 
     function owner() external view returns (address);
+
+    function creator() external view returns (address);
 }
 
 contract VerifiableFactory {
-
     event ProxyDeployed(
         address indexed sender,
         address indexed proxyAddress,
@@ -24,12 +26,12 @@ contract VerifiableFactory {
     /**
      * @dev Deploys a new `TransparentVerifiableProxy` contract at a deterministic address.
      *
-     * This function deploys a proxy contract using the CREATE2 opcode, ensuring a predictable 
-     * address based on the sender's address and a provided salt. The deployed proxy is 
+     * This function deploys a proxy contract using the CREATE2 opcode, ensuring a predictable
+     * address based on the sender's address and a provided salt. The deployed proxy is
      * controlled by the factory and is initialized to use a specific implementation.
      *
      * - A unique address for the proxy is generated using the caller's address and the salt.
-     * - After deployment, the proxy's `initialize` function is called to configure it with the given salt, 
+     * - After deployment, the proxy's `initialize` function is called to configure it with the given salt,
      *   the factory address, and the provided implementation address.
      * - The proxy is fully managed by the factory, which controls upgrades and other administrative methods.
      * - The event `ProxyDeployed` is emitted, logging details of the deployment including the sender, proxy address, salt, and implementation.
@@ -42,15 +44,17 @@ contract VerifiableFactory {
         address implementation,
         uint256 salt
     ) external returns (address) {
+        console.log("deploys");
+        console.logAddress(msg.sender);
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
         TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{
             salt: outerSalt
-        }();
+        }(address(this));
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
-        proxy.initialize(salt, address(this), implementation, "");
+        proxy.initialize(salt, msg.sender, implementation, "");
 
         emit ProxyDeployed(msg.sender, address(proxy), salt, implementation);
         return address(proxy);
@@ -62,7 +66,8 @@ contract VerifiableFactory {
         address newImplementation,
         bytes memory data
     ) external {
-        require(verifyContract(proxyAddress), "Only the owner can upgrade");
+        address owner = IProxy(proxyAddress).owner();
+        require(owner == msg.sender, "Only the owner can upgrade");
 
         // Upgrade the proxy to point to the new implementation
         ITransparentVerifiableProxy(payable(proxyAddress)).upgradeToAndCall(
@@ -74,44 +79,44 @@ contract VerifiableFactory {
     /**
      * @dev Initiates verification of a proxy contract.
      *
-     * This function attempts to validate a proxy contract by retrieving its salt 
-     * and reconstructing the address to ensure it was correctly deployed by the 
+     * This function attempts to validate a proxy contract by retrieving its salt
+     * and reconstructing the address to ensure it was correctly deployed by the
      * current factory.
      *
      * @param proxy The address of the proxy contract being verified.
      * @return A boolean indicating whether the verification succeeded.
      */
     function verifyContract(address proxy) public view returns (bool) {
-        // directly fetch storage
-        try IProxy(proxy).salt() returns (uint256 salt) {
-            address owner = IProxy(proxy).owner();
-
-            require(
-                address(this) == owner,
-                "Proxy owner does not match with factory address"
-            );
-
-            // reconstruct the address using CREATE2 and the original salt
-            bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
-
-            // bytes memory bytecode = abi.encodePacked(
-            //     type(TransparentVerifiableProxy).creationCode,
-            //     abi.encode(salt, address(this))
-            // );
-
-            // Compute the expected proxy address using the outerSalt
-            address expectedProxyAddress = Create2.computeAddress(
-                outerSalt,
-                keccak256(type(TransparentVerifiableProxy).creationCode)
-            );
-
-            // Verify if the computed address matches the proxy address
-            require(expectedProxyAddress == proxy, "Proxy address mismatch");
-
-            return true;
-        } catch {
+        if (!isContract(proxy)) {
             return false;
         }
+        try IProxy(proxy).salt() returns (uint256 salt) {
+            try IProxy(proxy).creator() returns (address creator) {
+                // verify the creator matches this factory
+                if (address(this) != creator) {
+                    return false;
+                }
+
+                // reconstruct the address using CREATE2 and verify it matches
+                bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
+                
+                // get creation bytecode with constructor arguments
+                bytes memory bytecode = abi.encodePacked(
+                    type(TransparentVerifiableProxy).creationCode,
+                    abi.encode(address(this))
+                );
+
+                address expectedProxyAddress = Create2.computeAddress(
+                    outerSalt,
+                    keccak256(bytecode),
+                    address(this)
+                );
+
+                return expectedProxyAddress == proxy;
+            } catch {}
+        } catch {}
+
+        return false;
     }
 
     function isContract(address account) internal view returns (bool) {

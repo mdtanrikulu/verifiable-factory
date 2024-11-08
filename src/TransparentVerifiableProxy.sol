@@ -18,8 +18,12 @@ interface ITransparentVerifiableProxy {
 }
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
-    uint256 public salt; // Salt, being used creating the proxy
-    address public owner; // The owner of the proxy contract
+    // immutable variable (in bytecode)
+    address immutable public creator;
+
+    // storage variables (in storage slots)
+    uint256 public salt; // Salt, being used creating the proxy (slot 0)
+    address public owner; // The owner of the proxy contract (slot 1)
 
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
@@ -29,6 +33,10 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     //     require(msg.sender == owner, "Caller is not the owner");
     //     _;
     // }
+
+    constructor(address _creator) {
+        creator = _creator;
+    }
 
     /**
      * @dev Initializes the verifiable proxy with an initial implementation specified by `implementation`.
@@ -78,7 +86,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * @dev If caller is the owner, process the call internally, otherwise transparently fallback to the proxy behavior.
      */
     function _fallback() internal virtual override {
-        if (msg.sender == owner) {
+        if (msg.sender == creator) {
             if (
                 msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector
             ) {
