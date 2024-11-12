@@ -11,15 +11,12 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 
 interface ITransparentVerifiableProxy {
     /// @dev See {UUPSUpgradeable-upgradeToAndCall}
-    function upgradeToAndCall(
-        address newImplementation,
-        bytes calldata data
-    ) external payable;
+    function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
 }
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
     // immutable variable (in bytecode)
-    address immutable public creator;
+    address public immutable creator;
 
     // storage variables (in storage slots)
     uint256 public salt; // Salt, being used creating the proxy (slot 0)
@@ -48,16 +45,12 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      *
      * - If `data` is empty, `msg.value` must be zero.
      */
-    function initialize(
-        uint256 _salt,
-        address _owner,
-        address implementation,
-        bytes memory data
-    ) public payable initializer {
-        require(
-            implementation != address(0),
-            "New implementation cannot be the zero address"
-        );
+    function initialize(uint256 _salt, address _owner, address implementation, bytes memory data)
+        public
+        payable
+        initializer
+    {
+        require(implementation != address(0), "New implementation cannot be the zero address");
 
         salt = _salt;
         owner = _owner;
@@ -72,13 +65,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * the https://eth.wiki/json-rpc/API#eth_getstorageat[`eth_getStorageAt`] RPC call.
      * `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc`
      */
-    function _implementation()
-        internal
-        view
-        virtual
-        override
-        returns (address)
-    {
+    function _implementation() internal view virtual override returns (address) {
         return ERC1967Utils.getImplementation();
     }
 
@@ -87,9 +74,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      */
     function _fallback() internal virtual override {
         if (msg.sender == creator) {
-            if (
-                msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector
-            ) {
+            if (msg.sig != ITransparentVerifiableProxy.upgradeToAndCall.selector) {
                 revert ProxyDeniedOwnerAccess();
             } else {
                 _dispatchUpgradeToAndCall();
@@ -107,10 +92,7 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
      * - If `data` is empty, `msg.value` must be zero.
      */
     function _dispatchUpgradeToAndCall() private {
-        (address newImplementation, bytes memory data) = abi.decode(
-            msg.data[4:],
-            (address, bytes)
-        );
+        (address newImplementation, bytes memory data) = abi.decode(msg.data[4:], (address, bytes));
         ERC1967Utils.upgradeToAndCall(newImplementation, data);
     }
 

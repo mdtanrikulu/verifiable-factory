@@ -21,12 +21,7 @@ contract VerifiableFactoryTest is Test {
     address public maliciousUser;
 
     // ### Events
-    event ProxyDeployed(
-        address indexed sender,
-        address indexed proxyAddress,
-        uint256 salt,
-        address implementation
-    );
+    event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
 
     function setUp() public {
         owner = makeAddr("owner");
@@ -45,10 +40,7 @@ contract VerifiableFactoryTest is Test {
 
     function test_FactoryInitialState() public view {
         assertTrue(address(factory) != address(0), "Factory deployment failed");
-        assertTrue(
-            address(implementation) != address(0),
-            "Implementation deployment failed"
-        );
+        assertTrue(address(implementation) != address(0), "Implementation deployment failed");
     }
 
     function test_DeployProxy() public {
@@ -56,32 +48,19 @@ contract VerifiableFactoryTest is Test {
 
         // test event emit
         vm.expectEmit(true, true, true, true);
-        emit ProxyDeployed(
-            owner,
-            computeExpectedAddress(salt),
-            salt,
-            address(implementation)
-        );
+        emit ProxyDeployed(owner, computeExpectedAddress(salt), salt, address(implementation));
 
         vm.startPrank(owner);
-        address proxyAddress = factory.deployProxy(
-            address(implementation),
-            salt
-        );
+        address proxyAddress = factory.deployProxy(address(implementation), salt);
 
         vm.stopPrank();
 
         // verify proxy deployment
-        assertTrue(
-            proxyAddress != address(0),
-            "Proxy address should not be zero"
-        );
+        assertTrue(proxyAddress != address(0), "Proxy address should not be zero");
         assertTrue(isContract(proxyAddress), "Proxy should be a contract");
 
         // verify proxy state
-        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(
-            payable(proxyAddress)
-        );
+        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
         assertEq(proxy.salt(), salt, "Proxy salt mismatch");
         assertEq(proxy.owner(), owner, "Proxy owner mismatch");
         assertEq(proxy.creator(), address(factory), "Proxy creator mismatch");
@@ -106,10 +85,7 @@ contract VerifiableFactoryTest is Test {
 
         // deploy proxy as owner
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(
-            address(implementation),
-            salt
-        );
+        address proxyAddress = factory.deployProxy(address(implementation), salt);
 
         // try to upgrade as non-owner (should fail)
         vm.prank(maliciousUser);
@@ -130,11 +106,7 @@ contract VerifiableFactoryTest is Test {
 
         // verify new implementation
         MockRegistryV2 upgradedProxy = MockRegistryV2(proxyAddress);
-        assertEq(
-            upgradedProxy.getRegistryVersion(),
-            2,
-            "Implementation upgrade failed"
-        );
+        assertEq(upgradedProxy.getRegistryVersion(), 2, "Implementation upgrade failed");
     }
 
     function test_VerifyContract() public {
@@ -142,10 +114,7 @@ contract VerifiableFactoryTest is Test {
 
         // deploy proxy
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(
-            address(implementation),
-            salt
-        );
+        address proxyAddress = factory.deployProxy(address(implementation), salt);
 
         vm.prank(owner);
         // verify the contract
@@ -163,15 +132,10 @@ contract VerifiableFactoryTest is Test {
         uint256 salt = 1;
 
         vm.prank(owner);
-        address proxyAddress = factory.deployProxy(
-            address(implementation),
-            salt
-        );
+        address proxyAddress = factory.deployProxy(address(implementation), salt);
 
         // test proxy state
-        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(
-            payable(proxyAddress)
-        );
+        TransparentVerifiableProxy proxy = TransparentVerifiableProxy(payable(proxyAddress));
 
         assertEq(proxy.salt(), salt, "Wrong salt");
         assertEq(proxy.owner(), owner, "Wrong owner");
@@ -187,21 +151,12 @@ contract VerifiableFactoryTest is Test {
         return size > 0;
     }
 
-    function computeExpectedAddress(
-        uint256 salt
-    ) internal view returns (address) {
+    function computeExpectedAddress(uint256 salt) internal view returns (address) {
         bytes32 outerSalt = keccak256(abi.encode(owner, salt));
 
-        bytes memory bytecode = abi.encodePacked(
-            type(TransparentVerifiableProxy).creationCode,
-            abi.encode(address(factory))
-        );
+        bytes memory bytecode =
+            abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(factory)));
 
-        return
-            Create2.computeAddress(
-                outerSalt,
-                keccak256(bytecode),
-                address(factory)
-            );
+        return Create2.computeAddress(outerSalt, keccak256(bytecode), address(factory));
     }
 }

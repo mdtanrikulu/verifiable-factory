@@ -14,12 +14,7 @@ interface IProxy {
 }
 
 contract VerifiableFactory {
-    event ProxyDeployed(
-        address indexed sender,
-        address indexed proxyAddress,
-        uint256 salt,
-        address implementation
-    );
+    event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
 
     constructor() {}
 
@@ -40,17 +35,12 @@ contract VerifiableFactory {
      * @param salt A value provided by the caller to ensure uniqueness of the proxy address.
      * @return proxy The address of the deployed `TransparentVerifiableProxy`.
      */
-    function deployProxy(
-        address implementation,
-        uint256 salt
-    ) external returns (address) {
+    function deployProxy(address implementation, uint256 salt) external returns (address) {
         console.log("deploys");
         console.logAddress(msg.sender);
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
-        TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{
-            salt: outerSalt
-        }(address(this));
+        TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{salt: outerSalt}(address(this));
 
         require(isContract(address(proxy)), "Proxy deployment failed");
 
@@ -61,19 +51,12 @@ contract VerifiableFactory {
     }
 
     // Function to upgrade the proxy's implementation (only owner of proxy can call this)
-    function upgradeImplementation(
-        address proxyAddress,
-        address newImplementation,
-        bytes memory data
-    ) external {
+    function upgradeImplementation(address proxyAddress, address newImplementation, bytes memory data) external {
         address owner = IProxy(proxyAddress).owner();
         require(owner == msg.sender, "Only the owner can upgrade");
 
         // Upgrade the proxy to point to the new implementation
-        ITransparentVerifiableProxy(payable(proxyAddress)).upgradeToAndCall(
-            newImplementation,
-            data
-        );
+        ITransparentVerifiableProxy(payable(proxyAddress)).upgradeToAndCall(newImplementation, data);
     }
 
     /**
@@ -99,18 +82,12 @@ contract VerifiableFactory {
 
                 // reconstruct the address using CREATE2 and verify it matches
                 bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
-                
-                // get creation bytecode with constructor arguments
-                bytes memory bytecode = abi.encodePacked(
-                    type(TransparentVerifiableProxy).creationCode,
-                    abi.encode(address(this))
-                );
 
-                address expectedProxyAddress = Create2.computeAddress(
-                    outerSalt,
-                    keccak256(bytecode),
-                    address(this)
-                );
+                // get creation bytecode with constructor arguments
+                bytes memory bytecode =
+                    abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(this)));
+
+                address expectedProxyAddress = Create2.computeAddress(outerSalt, keccak256(bytecode), address(this));
 
                 return expectedProxyAddress == proxy;
             } catch {}
