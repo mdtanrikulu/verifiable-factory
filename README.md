@@ -1,58 +1,52 @@
-## Verifiable Factory Contract
+# Verifiable Factory Contract
 
-### Components
+A system for deploying and verifying proxy contracts with predictable storage layouts and deterministic addresses using CREATE2.
 
-#### 1. Verifiable Factory Contract
+## Components
 
-- The VerifiableFactory contract is responsible for deploying ChildContract instances using CREATE2
-- It also handles the verification of deployed contracts:
-    - On-chain: Verifies the contract's address and bytecode using CREATE2 and extcodehash.
-    - Off-chain: Triggers a CCIP-Read flow when further verification (like storage layout consistency) is required.
+### 1. Verifiable Factory Contract
+- Deploys TransparentVerifiableProxy instances using CREATE2 opcode
+- Handles on-chain verification of deployed proxies
+- Manages proxy upgrades through a secure ownership model
+- Uses deterministic salt generation for predictable addresses
 
-#### 2. Child Contract
+### 2. TransparentVerifiableProxy
+- Transparent proxy pattern with verified storage layout
+- Fixed storage slots:
+  - Slot 0: `salt` (uint256)
+  - Slot 1: `owner` (address)
+- Immutable `creator` field (set in bytecode)
+- Implements secure upgrade mechanism
+- Initializable to prevent implementation tampering
 
-- The ChildContract is a simple contract deployed by the factory. It stores two key values for MVP purposes:
-    - value: A uint256 value passed during deployment.
-    - factory: The address of the factory contract that deployed it.
-- These storage slots are verified during the off-chain proof process.
-
-#### 3. EVMGateway
-
-- This is the off-chain service responsible for providing Merkle proofs of the contract's storage layout. 
-
-### Architecture
-
+## Architecture
 
 ```mermaid
 sequenceDiagram
     participant User
     participant VerifiableFactory
-    participant ChildContract
-    participant EVMGateway
+    participant TransparentVerifiableProxy
+    participant Implementation
 
-    %% Contract Creation Flow
-    User->>VerifiableFactory: Call createContract(_value)
-    VerifiableFactory->>VerifiableFactory: generateSalt(msg.sender)
-    VerifiableFactory->>VerifiableFactory: getContractBytecode(_value)
-    VerifiableFactory->>VerifiableFactory: Use CREATE2 to deploy ChildContract
-    VerifiableFactory->>User: Return newContract address
-    VerifiableFactory->>ChildContract: Emit ContractCreated(newContract)
+    %% Deployment Flow
+    User->>VerifiableFactory: deployProxy(implementation, salt)
+    VerifiableFactory->>VerifiableFactory: Generate outerSalt (keccak256(sender, salt))
+    VerifiableFactory->>TransparentVerifiableProxy: CREATE2 deployment
+    TransparentVerifiableProxy->>TransparentVerifiableProxy: Set immutable creator
+    VerifiableFactory->>TransparentVerifiableProxy: initialize(salt, owner, implementation)
+    TransparentVerifiableProxy->>Implementation: Delegate calls
+    VerifiableFactory->>User: Return proxy address
 
-    %% Contract Verification Flow
-    User->>VerifiableFactory: Call verifyContract(createdContractAddress)
-    VerifiableFactory->>VerifiableFactory: Check CREATE2 Address
-    VerifiableFactory->>VerifiableFactory: Use extcodehash to check runtime bytecode
-    alt Bytecode and Address Valid
-        VerifiableFactory->>VerifiableFactory: Use EVMFetcher to construct fetch request
-        VerifiableFactory->>VerifiableFactory: EVMFetcher.fetch(callbackSelector, extraData)
-        VerifiableFactory--)User: Reverts with OffchainLookup (handled by fetch())
-        User->>EVMGateway: Off-chain HTTP request with fetch payload
-        EVMGateway->>ChildContract: Query storage slots (off-chain)
-        EVMGateway->>User: Return storage data
-        User->>VerifiableFactory: Call verifyCallback(response)
-        VerifiableFactory->>VerifiableFactory: Process and verify storage data
-        VerifiableFactory->>User: Return verification result (true/false)
-    else Bytecode or Address Invalid
-        VerifiableFactory->>User: Return VerificationFailed
-    end
+    %% Verification Flow
+    User->>VerifiableFactory: verifyContract(proxyAddress)
+    VerifiableFactory->>TransparentVerifiableProxy: Check contract existence
+    VerifiableFactory->>TransparentVerifiableProxy: Query salt and creator
+    VerifiableFactory->>VerifiableFactory: Reconstruct CREATE2 address
+    VerifiableFactory->>User: Return verification result
+
+    %% Upgrade Flow
+    User->>VerifiableFactory: upgradeImplementation(proxy, newImpl, data)
+    VerifiableFactory->>TransparentVerifiableProxy: Check caller is owner
+    VerifiableFactory->>TransparentVerifiableProxy: upgradeToAndCall(newImpl, data)
+    TransparentVerifiableProxy->>Implementation: Switch delegation target
 ```
