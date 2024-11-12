@@ -12,9 +12,9 @@ A system for deploying and verifying proxy contracts with predictable storage la
 
 ### 2. TransparentVerifiableProxy
 - Transparent proxy pattern with verified storage layout
-- Fixed storage slots:
-  - Slot 0: `salt` (uint256)
-  - Slot 1: `owner` (address)
+- Fixed storage slots via Diamond Storage pattern:
+  - Slot 'proxy.verifiable.salt': `salt` (uint256)
+  - Slot 'proxy.verifiable.owner': `owner` (address)
 - Immutable `creator` field (set in bytecode)
 - Implements secure upgrade mechanism
 - Initializable to prevent implementation tampering

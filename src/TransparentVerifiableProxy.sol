@@ -9,6 +9,21 @@ import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
+// EIP-2535 Diamond Storage pattern
+// ref: https://eips.ethereum.org/EIPS/eip-2535#storage
+library StorageSlot {
+    bytes32 constant SLOT_SALT = keccak256("proxy.verifiable.salt");
+    bytes32 constant SLOT_OWNER = keccak256("proxy.verifiable.owner");
+
+    function getSaltSlot() internal pure returns (bytes32) {
+        return SLOT_SALT;
+    }
+
+    function getOwnerSlot() internal pure returns (bytes32) {
+        return SLOT_OWNER;
+    }
+}
+
 interface ITransparentVerifiableProxy {
     /// @dev See {UUPSUpgradeable-upgradeToAndCall}
     function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
@@ -17,10 +32,6 @@ interface ITransparentVerifiableProxy {
 contract TransparentVerifiableProxy is Proxy, Initializable {
     // immutable variable (in bytecode)
     address public immutable creator;
-
-    // storage variables (in storage slots)
-    uint256 public salt; // Salt, being used creating the proxy (slot 0)
-    address public owner; // The owner of the proxy contract (slot 1)
 
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
@@ -52,10 +63,32 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     {
         require(implementation != address(0), "New implementation cannot be the zero address");
 
-        salt = _salt;
-        owner = _owner;
+        bytes32 saltSlot = StorageSlot.getSaltSlot();
+        bytes32 ownerSlot = StorageSlot.getOwnerSlot();
 
+        assembly {
+            sstore(saltSlot, _salt)
+            sstore(ownerSlot, _owner)
+        }
         ERC1967Utils.upgradeToAndCall(implementation, data);
+    }
+
+    function salt() public view returns (uint256) {
+        bytes32 slot = StorageSlot.getSaltSlot();
+        uint256 value;
+        assembly {
+            value := sload(slot)
+        }
+        return value;
+    }
+
+    function owner() public view returns (address) {
+        bytes32 slot = StorageSlot.getOwnerSlot();
+        address value;
+        assembly {
+            value := sload(slot)
+        }
+        return value;
     }
 
     /**
