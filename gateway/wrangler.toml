@@ -1,3 +1,0 @@
-name = "gateway"
-main = "src/index.ts"
-compatibility_date = "2024-09-03"
