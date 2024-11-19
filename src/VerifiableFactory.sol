@@ -36,8 +36,6 @@ contract VerifiableFactory {
      * @return proxy The address of the deployed `TransparentVerifiableProxy`.
      */
     function deployProxy(address implementation, uint256 salt) external returns (address) {
-        console.log("deploys");
-        console.logAddress(msg.sender);
         bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
 
         TransparentVerifiableProxy proxy = new TransparentVerifiableProxy{salt: outerSalt}(address(this));
@@ -74,26 +72,32 @@ contract VerifiableFactory {
             return false;
         }
         try IProxy(proxy).salt() returns (uint256 salt) {
-            try IProxy(proxy).creator() returns (address creator) {
-                // verify the creator matches this factory
-                if (address(this) != creator) {
-                    return false;
-                }
-
-                // reconstruct the address using CREATE2 and verify it matches
-                bytes32 outerSalt = keccak256(abi.encode(msg.sender, salt));
-
-                // get creation bytecode with constructor arguments
-                bytes memory bytecode =
-                    abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(this)));
-
-                address expectedProxyAddress = Create2.computeAddress(outerSalt, keccak256(bytecode), address(this));
-
-                return expectedProxyAddress == proxy;
+            try IProxy(proxy).owner() returns (address owner) {
+                try IProxy(proxy).creator() returns (address creator) {
+                    return _verifyContract(proxy, creator, owner, salt);
+                } catch {}
             } catch {}
         } catch {}
 
         return false;
+    }
+
+    function _verifyContract(address proxy, address creator, address owner, uint256 salt) private view returns (bool) {
+        // verify the creator matches this factory
+        if (address(this) != creator) {
+            return false;
+        }
+
+        // reconstruct the address using CREATE2 and verify it matches
+        bytes32 outerSalt = keccak256(abi.encode(owner, salt));
+
+        // get creation bytecode with constructor arguments
+        bytes memory bytecode =
+            abi.encodePacked(type(TransparentVerifiableProxy).creationCode, abi.encode(address(this)));
+
+        address expectedProxyAddress = Create2.computeAddress(outerSalt, keccak256(bytecode), address(this));
+
+        return expectedProxyAddress == proxy;
     }
 
     function isContract(address account) internal view returns (bool) {
