@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import {console} from "forge-std/console.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
-import {ITransparentVerifiableProxy, TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
-import {ITransParentVerifiableProxy} from "./ITransParentVerifiableProxy.sol";
+import {TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
+import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 
 contract VerifiableFactory {
     event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
