@@ -8,6 +8,7 @@ pragma solidity ^0.8.20;
 import {Proxy} from "@openzeppelin/contracts/proxy/Proxy.sol";
 import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {ITransParentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 
 // EIP-2535 Diamond Storage pattern
 // ref: https://eips.ethereum.org/EIPS/eip-2535#storage
@@ -24,7 +25,7 @@ library StorageSlot {
     }
 }
 
-interface ITransparentVerifiableProxy {
+interface ITransparentVerifiableProxy is ITransParentVerifiableProxy {
     /// @dev See {UUPSUpgradeable-upgradeToAndCall}
     function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
 }

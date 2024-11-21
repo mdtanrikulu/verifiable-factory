@@ -4,12 +4,7 @@ pragma solidity ^0.8.20;
 import {console} from "forge-std/console.sol";
 import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
 import {ITransparentVerifiableProxy, TransparentVerifiableProxy} from "./TransparentVerifiableProxy.sol";
-
-interface IProxy {
-    function salt() external view returns (uint256);
-
-    function owner() external view returns (address);
-}
+import {ITransParentVerifiableProxy} from "./ITransParentVerifiableProxy.sol";
 
 contract VerifiableFactory {
     event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation);
@@ -48,7 +43,7 @@ contract VerifiableFactory {
 
     // Function to upgrade the proxy's implementation (only owner of proxy can call this)
     function upgradeImplementation(address proxyAddress, address newImplementation, bytes memory data) external {
-        address owner = IProxy(proxyAddress).owner();
+        address owner = ITransparentVerifiableProxy(proxyAddress).owner();
         require(owner == msg.sender, "Only the owner can upgrade");
 
         // Upgrade the proxy to point to the new implementation
@@ -69,8 +64,8 @@ contract VerifiableFactory {
         if (!isContract(proxy)) {
             return false;
         }
-        try IProxy(proxy).salt() returns (uint256 salt) {
-            try IProxy(proxy).owner() returns (address owner) {
+        try ITransparentVerifiableProxy(proxy).salt() returns (uint256 salt) {
+            try ITransparentVerifiableProxy(proxy).owner() returns (address owner) {
                 return _verifyContract(proxy, owner, salt);
             } catch {}
         } catch {}
