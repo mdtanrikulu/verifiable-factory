@@ -9,8 +9,6 @@ interface IProxy {
     function salt() external view returns (uint256);
 
     function owner() external view returns (address);
-
-    function creator() external view returns (address);
 }
 
 contract VerifiableFactory {
@@ -73,21 +71,14 @@ contract VerifiableFactory {
         }
         try IProxy(proxy).salt() returns (uint256 salt) {
             try IProxy(proxy).owner() returns (address owner) {
-                try IProxy(proxy).creator() returns (address creator) {
-                    return _verifyContract(proxy, creator, owner, salt);
-                } catch {}
+                return _verifyContract(proxy, owner, salt);
             } catch {}
         } catch {}
 
         return false;
     }
 
-    function _verifyContract(address proxy, address creator, address owner, uint256 salt) private view returns (bool) {
-        // verify the creator matches this factory
-        if (address(this) != creator) {
-            return false;
-        }
-
+    function _verifyContract(address proxy, address owner, uint256 salt) private view returns (bool) {
         // reconstruct the address using CREATE2 and verify it matches
         bytes32 outerSalt = keccak256(abi.encode(owner, salt));
 
