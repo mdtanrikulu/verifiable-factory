@@ -10,11 +10,7 @@ import {ERC1967Utils} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Utils.s
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {StorageSlot} from "@openzeppelin/contracts/utils/StorageSlot.sol";
 import {SlotDerivation} from "@openzeppelin/contracts/utils/SlotDerivation.sol";
-
-interface ITransparentVerifiableProxy {
-    /// @dev See {UUPSUpgradeable-upgradeToAndCall}
-    function upgradeToAndCall(address newImplementation, bytes calldata data) external payable;
-}
+import {ITransparentVerifiableProxy} from "./ITransparentVerifiableProxy.sol";
 
 contract TransparentVerifiableProxy is Proxy, Initializable {
     using StorageSlot for bytes32;
@@ -31,9 +27,9 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
 
-    // // Modifier that allows only the owner to call certain functions
-    // modifier onlyOwner() {
-    //     require(msg.sender == owner, "Caller is not the owner");
+    // modifier that allows only the creator address to call certain functions
+    // modifier onlyCreator() {
+    //     require(msg.sender == creator, "Caller is not the creator address");
     //     _;
     // }
 
