@@ -27,9 +27,9 @@ contract TransparentVerifiableProxy is Proxy, Initializable {
     // ### EVENTS
     error ProxyDeniedOwnerAccess();
 
-    // // Modifier that allows only the owner to call certain functions
-    // modifier onlyOwner() {
-    //     require(msg.sender == owner, "Caller is not the owner");
+    // modifier that allows only the creator address to call certain functions
+    // modifier onlyCreator() {
+    //     require(msg.sender == creator, "Caller is not the creator address");
     //     _;
     // }
 
